@@ -23,7 +23,7 @@ try:
         print("Screen capture returned None")
         sys.exit(1)
     
-    print(f"Screen captured successfully")
+    print(f"✅ Screen captured successfully")
     print(f"   Image size: {img.shape[1]}x{img.shape[0]}")
     
     # Save test image

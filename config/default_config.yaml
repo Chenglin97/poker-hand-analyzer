@@ -7,19 +7,19 @@ reference_resolution:
 
 card_positions:
   board:
-    - [433, 188, 120, 170]  # [x, y, width, height]
-    - [578, 188, 120, 170]
-    - [723, 188, 120, 170]
-    - [868, 188, 120, 170]
-    - [1013, 188, 120, 170]
+    - [260, 80, 130, 250]    # 6♦ (first card)
+    - [400, 80, 130, 250]    # 4♠ 
+    - [540, 80, 130, 250]    # 8♣
+    - [680, 80, 130, 250]    # 10♠
+    - [820, 80, 130, 250]    # 5♥
   
   left_hand:
-    - [318, 423, 170, 190]
-    - [503, 423, 170, 190]
+    - [260, 425, 60, 240]   # A♥
+    - [330, 425, 110, 240]   # 3♥
   
   right_hand:
-    - [943, 423, 170, 190]
-    - [1128, 423, 170, 190]
+    - [760, 425, 60, 240]   # 9♥
+    - [820, 425, 110, 240]   # K♦
 
 # Card recognition settings
 recognition:
@@ -29,14 +29,14 @@ recognition:
   
   # Color thresholds for suit detection
   red_threshold:
-    min_r: 140
-    r_over_b: 40
-    r_over_g: 20
+    min_r: 130
+    r_over_b: 25
+    r_over_g: 15
   
   black_threshold:
-    max_r: 100
-    max_g: 100
-    max_b: 100
+    max_r: 140
+    max_g: 140
+    max_b: 140
 
 # Analysis settings
 analysis:

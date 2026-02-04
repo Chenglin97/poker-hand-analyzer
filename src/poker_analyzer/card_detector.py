@@ -1,7 +1,9 @@
+"""Card detection using EasyOCR."""
+
 import cv2
 import numpy as np
-import pytesseract
-from typing import Optional, Dict, List, Tuple
+import easyocr
+from typing import Optional, Dict, List
 import logging
 
 from .config import config
@@ -10,13 +12,13 @@ logger = logging.getLogger(__name__)
 
 
 class CardDetector:
-    """Detect and recognize playing cards from game screenshots."""
+    """Detect and recognize playing cards using EasyOCR."""
     
     def __init__(self):
-        """Initialize card detector."""
-        # Set tesseract command if specified
-        if config.tesseract_cmd:
-            pytesseract.pytesseract.tesseract_cmd = config.tesseract_cmd
+        """Initialize card detector with EasyOCR."""
+        logger.info("Initializing EasyOCR (this may take a moment)...")
+        self.reader = easyocr.Reader(['en'], gpu=False, verbose=False)
+        logger.info("EasyOCR initialized")
         
         # Load configuration
         self.ref_width = config.reference_resolution['width']
@@ -25,20 +27,11 @@ class CardDetector:
         
         # Recognition settings
         self.corner_crop_ratio = config.get('recognition.corner_crop_ratio', 0.45)
-        self.ocr_whitelist = config.get('recognition.ocr_whitelist', 'A23456789JQK10')
         
-        logger.info("Card detector initialized")
+        logger.info("Card detector ready")
     
     def detect_all_cards(self, img: np.ndarray) -> Dict[str, List[str]]:
-        """
-        Detect all cards from screenshot.
-        
-        Args:
-            img: Screenshot image (BGR format)
-            
-        Returns:
-            Dictionary with 'board', 'left_hand', 'right_hand' card lists
-        """
+        """Detect all cards from screenshot."""
         h, w = img.shape[:2]
         
         cards = {
@@ -70,16 +63,7 @@ class CardDetector:
         return cards
     
     def _recognize_card(self, card_img: np.ndarray) -> Optional[str]:
-        """
-        Recognize a single card.
-        
-        Args:
-            card_img: Card image region
-            
-        Returns:
-            Card string (e.g., 'AH', '7D') or None if recognition failed
-        """
-        # Extract top-left corner
+        """Recognize a single card."""
         h, w = card_img.shape[:2]
         corner = card_img[5:int(h*self.corner_crop_ratio), 5:int(w*self.corner_crop_ratio)]
         
@@ -96,25 +80,22 @@ class CardDetector:
         return f"{rank}{suit}"
     
     def _read_rank(self, corner_img: np.ndarray) -> Optional[str]:
-        """
-        Read card rank using OCR.
-        
-        Args:
-            corner_img: Corner image containing rank
-            
-        Returns:
-            Rank string (A, K, Q, J, 10, 9, ..., 2) or None
-        """
+        """Read card rank using EasyOCR."""
         try:
             # Convert to grayscale
             gray = cv2.cvtColor(corner_img, cv2.COLOR_BGR2GRAY)
             
-            # Threshold
+            # Enhance contrast
             _, thresh = cv2.threshold(gray, 180, 255, cv2.THRESH_BINARY_INV)
             
-            # OCR
-            custom_config = f'--oem 3 --psm 6 -c tessedit_char_whitelist={self.ocr_whitelist}'
-            text = pytesseract.image_to_string(thresh, config=custom_config)
+            # Use EasyOCR
+            results = self.reader.readtext(thresh, detail=0, allowlist='A23456789JQK10')
+            
+            if not results:
+                return None
+            
+            # Combine all text
+            text = ' '.join(results).upper()
             
             # Parse rank
             rank = self._parse_rank(text)
@@ -125,16 +106,8 @@ class CardDetector:
             return None
     
     def _parse_rank(self, text: str) -> Optional[str]:
-        """
-        Parse rank from OCR text.
-        
-        Args:
-            text: Raw OCR text
-            
-        Returns:
-            Parsed rank or None
-        """
-        text = text.strip().upper().replace('O', '0').replace('I', '1')
+        """Parse rank from OCR text."""
+        text = text.strip().upper().replace('O', '0').replace('I', '1').replace('l', '1')
         
         # Check for each rank in priority order
         for rank in ['10', 'A', 'K', 'Q', 'J', '9', '8', '7', '6', '5', '4', '3', '2']:
@@ -144,15 +117,7 @@ class CardDetector:
         return None
     
     def _detect_suit(self, corner_img: np.ndarray) -> Optional[str]:
-        """
-        Detect suit by color and shape analysis.
-        
-        Args:
-            corner_img: Corner image containing suit symbol
-            
-        Returns:
-            Suit character ('H', 'D', 'S', 'C') or None
-        """
+        """Detect suit by color and shape analysis."""
         h, w = corner_img.shape[:2]
         
         # Sample suit symbol area
@@ -186,7 +151,7 @@ class CardDetector:
         try:
             suit = self._distinguish_suit_by_shape(suit_region, is_red)
             if suit:
-                logger.debug(f"Detected suit {suit} (red={is_red}) with color R={r:.1f}, G={g:.1f}, B={b:.1f}")
+                logger.debug(f"Detected suit {suit} (red={is_red})")
                 return suit
         except Exception as e:
             logger.warning(f"Shape analysis failed: {e}")
@@ -195,16 +160,7 @@ class CardDetector:
         return 'H' if is_red else 'S'
     
     def _distinguish_suit_by_shape(self, suit_region: np.ndarray, is_red: bool) -> Optional[str]:
-        """
-        Distinguish between suits of the same color using shape analysis.
-        
-        Args:
-            suit_region: Image region containing suit symbol
-            is_red: True if red suit, False if black suit
-            
-        Returns:
-            Suit character or None
-        """
+        """Distinguish between suits of the same color using shape analysis."""
         # Convert to grayscale
         gray = cv2.cvtColor(suit_region, cv2.COLOR_BGR2GRAY)
         
@@ -227,9 +183,7 @@ class CardDetector:
         
         perimeter = cv2.arcLength(largest_contour, True)
         
-        # Calculate shape metrics
-        # Circularity: 4π × area / perimeter²
-        # Perfect circle = 1.0, Square ≈ 0.785
+        # Calculate circularity
         circularity = 0
         if perimeter > 0:
             circularity = 4 * np.pi * area / (perimeter * perimeter)
@@ -238,32 +192,22 @@ class CardDetector:
         x, y, w_box, h_box = cv2.boundingRect(largest_contour)
         aspect_ratio = w_box / h_box if h_box > 0 else 1.0
         
-        # Convex hull ratio (how convex the shape is)
+        # Convex hull ratio
         hull = cv2.convexHull(largest_contour)
         hull_area = cv2.contourArea(hull)
         solidity = area / hull_area if hull_area > 0 else 0
         
-        logger.debug(f"Shape metrics: circularity={circularity:.3f}, aspect={aspect_ratio:.3f}, solidity={solidity:.3f}")
+        logger.debug(f"Shape: circ={circularity:.3f}, aspect={aspect_ratio:.3f}, solid={solidity:.3f}")
         
         if is_red:
-            # Distinguish Hearts (♥) vs Diamonds (♦)
-            # Hearts: rounded, more circular, higher solidity
-            # Diamonds: angular, rhombus shape, lower circularity
-            
-            if circularity > 0.65 or solidity > 0.85:
-                # More rounded and solid = Hearts
-                return 'H'
+            # Hearts vs Diamonds
+            if circularity > 0.55 or solidity > 0.80:
+                return 'H'  # Hearts (rounded)
             else:
-                # More angular = Diamonds
-                return 'D'
+                return 'D'  # Diamonds (angular)
         else:
-            # Distinguish Spades (♠) vs Clubs (♣)
-            # Spades: pointed top, taller, lower aspect ratio
-            # Clubs: three circles, more compact, higher aspect ratio
-            
-            if aspect_ratio < 0.85:
-                # Taller/narrower = Spades
-                return 'S'
+            # Spades vs Clubs
+            if aspect_ratio < 0.80:
+                return 'S'  # Spades (tall/pointed)
             else:
-                # Wider/more compact = Clubs
-                return 'C'
+                return 'C'  # Clubs (wide/compact)
