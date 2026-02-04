@@ -1,0 +1,52 @@
+# Default configuration for Poker Hand Analyzer
+
+# Card positions (for reference resolution 1456x819)
+reference_resolution:
+  width: 1456
+  height: 819
+
+card_positions:
+  board:
+    - [433, 188, 120, 170]  # [x, y, width, height]
+    - [578, 188, 120, 170]
+    - [723, 188, 120, 170]
+    - [868, 188, 120, 170]
+    - [1013, 188, 120, 170]
+  
+  left_hand:
+    - [318, 423, 170, 190]
+    - [503, 423, 170, 190]
+  
+  right_hand:
+    - [943, 423, 170, 190]
+    - [1128, 423, 170, 190]
+
+# Card recognition settings
+recognition:
+  corner_crop_ratio: 0.45  # Crop top-left corner for rank/suit detection
+  ocr_whitelist: "A23456789JQK10"
+  min_confidence: 0.7
+  
+  # Color thresholds for suit detection
+  red_threshold:
+    min_r: 140
+    r_over_b: 40
+    r_over_g: 20
+  
+  black_threshold:
+    max_r: 100
+    max_g: 100
+    max_b: 100
+
+# Analysis settings
+analysis:
+  loop_interval: 2.0  # seconds between analyses
+  retry_on_failure: true
+  max_retries: 3
+
+# Logging
+logging:
+  level: INFO
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "poker_analyzer.log"
+  console: true
