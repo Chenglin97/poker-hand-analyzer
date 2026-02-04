@@ -150,12 +150,31 @@ class CardDetector:
             return None
     
     def _parse_rank(self, text: str) -> Optional[str]:
-        """Parse rank from OCR text."""
-        text = text.strip().upper().replace('O', '0').replace('I', '1').replace('l', '1')
+        """Parse rank from OCR text with Q-specific handling."""
+        text = text.strip().upper()
         
+        # Common OCR mistakes
+        text = text.replace('O', '0')  # O → 0
+        text = text.replace('I', '1')  # I → 1
+        text = text.replace('l', '1')  # l → 1
+        text = text.replace('o', '0')  # o → 0
+        if text == '1':
+            return 'J'
+        # Q-specific fixes
+        # If text contains '0' or 'O' alone, might be Q
+        if text in ['0', 'O', 'o']:
+            return 'Q'
+        
+        # Check for each rank in priority order
+        # Put Q before other numbers to catch it first
         for rank in ['10', 'A', 'K', 'Q', 'J', '9', '8', '7', '6', '5', '4', '3', '2']:
             if rank in text:
                 return rank
+        
+        # Fallback: if text is single 'O' or '0' and we haven't matched anything
+        if len(text) <= 2 and ('0' in text or 'O' in text):
+            logger.debug(f"Assuming OCR text '{text}' is Q")
+            return 'Q'
         
         return None
     
