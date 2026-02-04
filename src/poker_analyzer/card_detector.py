@@ -1,4 +1,4 @@
-"""Card detection using EasyOCR."""
+"""Card detection with separate rank and suit regions."""
 
 import cv2
 import numpy as np
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class CardDetector:
-    """Detect and recognize playing cards using EasyOCR."""
+    """Detect and recognize playing cards using separate rank/suit regions."""
     
     def __init__(self):
         """Initialize card detector with EasyOCR."""
@@ -23,10 +23,7 @@ class CardDetector:
         # Load configuration
         self.ref_width = config.reference_resolution['width']
         self.ref_height = config.reference_resolution['height']
-        self.positions = config.card_positions
-        
-        # Recognition settings
-        self.corner_crop_ratio = config.get('recognition.corner_crop_ratio', 0.45)
+        self.card_positions = config.card_positions
         
         logger.info("Card detector ready")
     
@@ -40,8 +37,12 @@ class CardDetector:
             'right_hand': []
         }
         
-        for position_name, regions in self.positions.items():
-            for (x, y, width, height) in regions:
+        for position_name, card_list in self.card_positions.items():
+            for card_config in card_list:
+                # Get card position
+                pos = card_config['position']
+                x, y, width, height = pos
+                
                 # Scale coordinates to actual image size
                 sx = int(x * w / self.ref_width)
                 sy = int(y * h / self.ref_height)
@@ -51,8 +52,8 @@ class CardDetector:
                 # Extract card region
                 card_img = img[sy:sy+sh, sx:sx+sw]
                 
-                # Recognize card
-                card = self._recognize_card(card_img)
+                # Recognize card with its specific regions
+                card = self._recognize_card(card_img, card_config)
                 
                 if card:
                     cards[position_name].append(card)
@@ -62,44 +63,87 @@ class CardDetector:
         
         return cards
     
-    def _recognize_card(self, card_img: np.ndarray) -> Optional[str]:
-        """Recognize a single card."""
+    def _recognize_card(self, card_img: np.ndarray, card_config: dict) -> Optional[str]:
+        """
+        Recognize a single card using separate rank and suit regions.
+        
+        Args:
+            card_img: Full card image
+            card_config: Config dict with 'rank_region' and 'suit_region'
+        """
+        # Get region definitions
+        rank_reg = card_config.get('rank_region', [0.0, 0.0, 0.4, 0.5])
+        suit_reg = card_config.get('suit_region', [0.5, 0.05, 0.75, 0.45])
+        
         h, w = card_img.shape[:2]
-        corner = card_img[5:int(h*self.corner_crop_ratio), 5:int(w*self.corner_crop_ratio)]
+        
+        # Extract rank region
+        rt, rl, rb, rr = rank_reg
+        rank_img = card_img[int(h*rt):int(h*rb), int(w*rl):int(w*rr)]
+        
+        if rank_img.size == 0:
+            logger.warning("Empty rank region")
+            return None
+        
+        # Extract suit region
+        st, sl, sb, sr = suit_reg
+        suit_img = card_img[int(h*st):int(h*sb), int(w*sl):int(w*sr)]
+        
+        if suit_img.size == 0:
+            logger.warning("Empty suit region")
+            return None
         
         # Read rank
-        rank = self._read_rank(corner)
+        rank = self._read_rank(rank_img)
         if not rank:
+            logger.debug(f"Failed to read rank from region {rank_img.shape}")
             return None
         
         # Detect suit
-        suit = self._detect_suit(corner)
+        suit = self._detect_suit_from_region(suit_img)
         if not suit:
+            logger.debug(f"Failed to detect suit from region {suit_img.shape}")
             return None
         
         return f"{rank}{suit}"
     
-    def _read_rank(self, corner_img: np.ndarray) -> Optional[str]:
+    def _read_rank(self, rank_img: np.ndarray) -> Optional[str]:
         """Read card rank using EasyOCR."""
         try:
             # Convert to grayscale
-            gray = cv2.cvtColor(corner_img, cv2.COLOR_BGR2GRAY)
+            gray = cv2.cvtColor(rank_img, cv2.COLOR_BGR2GRAY)
             
-            # Enhance contrast
-            _, thresh = cv2.threshold(gray, 180, 255, cv2.THRESH_BINARY_INV)
+            # Resize if too small
+            h, w = gray.shape
+            if h < 100 or w < 100:
+                scale = 3
+                gray = cv2.resize(gray, (w*scale, h*scale), interpolation=cv2.INTER_CUBIC)
+                logger.debug(f"Resized rank from {w}x{h} to {gray.shape[1]}x{gray.shape[0]}")
             
-            # Use EasyOCR
-            results = self.reader.readtext(thresh, detail=0, allowlist='A23456789JQK10')
+            # Try multiple preprocessing methods
+            preprocessing = [
+                lambda g: g,  # Original
+                lambda g: cv2.threshold(g, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1],
+                lambda g: cv2.threshold(g, 180, 255, cv2.THRESH_BINARY_INV)[1],
+                lambda g: cv2.threshold(g, 150, 255, cv2.THRESH_BINARY_INV)[1],
+            ]
             
-            if not results:
-                return None
+            for i, preprocess in enumerate(preprocessing):
+                processed = preprocess(gray)
+                results = self.reader.readtext(processed, detail=0, allowlist='A23456789JQK10')
+                
+                if not results:
+                    results = self.reader.readtext(processed, detail=0)
+                
+                if results:
+                    text = ' '.join(results).upper()
+                    rank = self._parse_rank(text)
+                    if rank:
+                        logger.debug(f"OCR method {i}: detected '{rank}' from '{text}'")
+                        return rank
             
-            # Combine all text
-            text = ' '.join(results).upper()
-            
-            # Parse rank
-            rank = self._parse_rank(text)
-            return rank
+            logger.warning(f"All OCR methods failed")
+            return None
             
         except Exception as e:
             logger.error(f"OCR error: {e}")
@@ -109,105 +153,166 @@ class CardDetector:
         """Parse rank from OCR text."""
         text = text.strip().upper().replace('O', '0').replace('I', '1').replace('l', '1')
         
-        # Check for each rank in priority order
         for rank in ['10', 'A', 'K', 'Q', 'J', '9', '8', '7', '6', '5', '4', '3', '2']:
             if rank in text:
                 return rank
         
         return None
     
-    def _detect_suit(self, corner_img: np.ndarray) -> Optional[str]:
-        """Detect suit by color and shape analysis."""
-        h, w = corner_img.shape[:2]
+    def _detect_suit_from_region(self, suit_img: np.ndarray) -> Optional[str]:
+        """
+        Detect suit from dedicated suit region.
         
-        # Sample suit symbol area
-        suit_region = corner_img[int(h*0.25):int(h*0.55), int(w*0.15):int(w*0.45)]
-        
-        # Calculate average color
-        avg_color = np.mean(suit_region, axis=(0, 1))
+        Args:
+            suit_img: Image region containing only the suit symbol
+            
+        Returns:
+            Suit character ('H', 'D', 'S', 'C') or None
+        """
+        # Get average color
+        avg_color = np.mean(suit_img, axis=(0, 1))
         b, g, r = avg_color
         
-        # Get thresholds from config
+        # Get thresholds
         red_cfg = config.get('recognition.red_threshold', {})
         black_cfg = config.get('recognition.black_threshold', {})
         
-        min_r = red_cfg.get('min_r', 140)
-        r_over_b = red_cfg.get('r_over_b', 40)
-        r_over_g = red_cfg.get('r_over_g', 20)
+        min_r = red_cfg.get('min_r', 130)
+        r_over_b = red_cfg.get('r_over_b', 20)
+        r_over_g = red_cfg.get('r_over_g', 12)
+        max_r = black_cfg.get('max_r', 140)
+        max_g = black_cfg.get('max_g', 140)
+        max_b = black_cfg.get('max_b', 140)
         
-        max_r = black_cfg.get('max_r', 100)
-        max_g = black_cfg.get('max_g', 100)
-        max_b = black_cfg.get('max_b', 100)
-        
-        # First determine if red or black
+        # Determine color
         is_red = r > min_r and r > b + r_over_b and r > g + r_over_g
+        
+        # Special case for very light red
+        if not is_red and r > 200 and r > b and r > g:
+            is_red = True
+            logger.debug(f"Light red: R={r:.1f}")
+        
         is_black = r < max_r and g < max_g and b < max_b
         
         if not (is_red or is_black):
-            logger.warning(f"Could not determine color: R={r:.1f}, G={g:.1f}, B={b:.1f}")
+            logger.warning(f"Unknown color: R={r:.1f}, G={g:.1f}, B={b:.1f}")
             return None
         
-        # Analyze shape to distinguish between suits of same color
-        try:
-            suit = self._distinguish_suit_by_shape(suit_region, is_red)
-            if suit:
-                logger.debug(f"Detected suit {suit} (red={is_red})")
-                return suit
-        except Exception as e:
-            logger.warning(f"Shape analysis failed: {e}")
+        logger.debug(f"Suit color: R={r:.1f}, G={g:.1f}, B={b:.1f}, is_red={is_red}")
         
-        # Fallback to color only
-        return 'H' if is_red else 'S'
+        # Analyze shape
+        suit = self._analyze_shape(suit_img, is_red)
+        return suit
     
-    def _distinguish_suit_by_shape(self, suit_region: np.ndarray, is_red: bool) -> Optional[str]:
-        """Distinguish between suits of the same color using shape analysis."""
-        # Convert to grayscale
-        gray = cv2.cvtColor(suit_region, cv2.COLOR_BGR2GRAY)
-        
-        # Threshold to get binary image
-        _, binary = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY_INV)
-        
-        # Find contours
-        contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        
-        if not contours:
-            return None
-        
-        # Get largest contour (the suit symbol)
-        largest_contour = max(contours, key=cv2.contourArea)
-        area = cv2.contourArea(largest_contour)
-        
-        # Need minimum area to analyze
-        if area < 10:
-            return None
-        
-        perimeter = cv2.arcLength(largest_contour, True)
-        
-        # Calculate circularity
-        circularity = 0
-        if perimeter > 0:
+    def _analyze_shape(self, suit_img: np.ndarray, is_red: bool) -> Optional[str]:
+        """Analyze suit symbol shape."""
+        try:
+            # Convert to grayscale
+            gray = cv2.cvtColor(suit_img, cv2.COLOR_BGR2GRAY)
+            
+            # Threshold
+            _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+            
+            # Find contours
+            contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            
+            if not contours:
+                logger.warning("No contours found")
+                return 'H' if is_red else 'S'
+            
+            # Get largest contour
+            largest = max(contours, key=cv2.contourArea)
+            area = cv2.contourArea(largest)
+            
+            if area < 50:
+                logger.warning(f"Contour too small: {area}")
+                return 'H' if is_red else 'S'
+            
+            perimeter = cv2.arcLength(largest, True)
+            if perimeter == 0:
+                return 'H' if is_red else 'S'
+            
+            # Calculate metrics
             circularity = 4 * np.pi * area / (perimeter * perimeter)
-        
-        # Bounding box aspect ratio
-        x, y, w_box, h_box = cv2.boundingRect(largest_contour)
-        aspect_ratio = w_box / h_box if h_box > 0 else 1.0
-        
-        # Convex hull ratio
-        hull = cv2.convexHull(largest_contour)
-        hull_area = cv2.contourArea(hull)
-        solidity = area / hull_area if hull_area > 0 else 0
-        
-        logger.debug(f"Shape: circ={circularity:.3f}, aspect={aspect_ratio:.3f}, solid={solidity:.3f}")
-        
-        if is_red:
-            # Hearts vs Diamonds
-            if circularity > 0.55 or solidity > 0.80:
-                return 'H'  # Hearts (rounded)
+            
+            x, y, w, h = cv2.boundingRect(largest)
+            aspect_ratio = w / h if h > 0 else 1.0
+            
+            hull = cv2.convexHull(largest)
+            hull_area = cv2.contourArea(hull)
+            solidity = area / hull_area if hull_area > 0 else 0
+            
+            bbox_area = w * h
+            extent = area / bbox_area if bbox_area > 0 else 0
+            
+            logger.debug(f"Shape: circ={circularity:.3f}, aspect={aspect_ratio:.3f}, "
+                        f"solid={solidity:.3f}, extent={extent:.3f}")
+            
+            if is_red:
+                # Hearts vs Diamonds scoring
+                heart_score = 0
+                diamond_score = 0
+                
+                # Circularity
+                if circularity < 0.35:
+                    diamond_score += 3
+                elif circularity < 0.50:
+                    diamond_score += 1
+                elif circularity > 0.65:
+                    heart_score += 2
+                elif circularity > 0.54:
+                    heart_score += 1
+                
+                # Solidity
+                if solidity < 0.70:
+                    diamond_score += 2
+                elif solidity > 0.90:
+                    heart_score += 1
+                elif solidity > 0.80:
+                    heart_score += 1
+                
+                # Extent
+                if extent < 0.50:
+                    diamond_score += 3
+                elif extent < 0.52:
+                    diamond_score += 1
+                elif extent > 0.60:
+                    heart_score += 2
+                elif extent > 0.55:
+                    heart_score += 1
+                
+                # Aspect ratio
+                if aspect_ratio < 0.75:
+                    diamond_score += 1
+                elif aspect_ratio > 0.85:
+                    heart_score += 1
+                
+                logger.debug(f"Red scoring: H={heart_score}, D={diamond_score}")
+                
+                # Decide
+                if diamond_score > heart_score:
+                    return 'D'
+                elif heart_score > diamond_score:
+                    return 'H'
+                else:
+                    # Tie-breaker
+                    if solidity > 0.82:
+                        logger.debug("Tie → Heart (solidity)")
+                        return 'H'
+                    elif extent < 0.53:
+                        logger.debug("Tie → Diamond (extent)")
+                        return 'D'
+                    else:
+                        return 'H'
             else:
-                return 'D'  # Diamonds (angular)
-        else:
-            # Spades vs Clubs
-            if aspect_ratio < 0.80:
-                return 'S'  # Spades (tall/pointed)
-            else:
-                return 'C'  # Clubs (wide/compact)
+                # Spades vs Clubs
+                if aspect_ratio < 0.85:
+                    logger.debug(f"Black: aspect {aspect_ratio:.3f} → Spades")
+                    return 'S'
+                else:
+                    logger.debug(f"Black: aspect {aspect_ratio:.3f} → Clubs")
+                    return 'C'
+                    
+        except Exception as e:
+            logger.error(f"Shape analysis error: {e}", exc_info=True)
+            return 'H' if is_red else 'S'

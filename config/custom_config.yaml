@@ -1,0 +1,73 @@
+# Custom configuration with separate rank and suit regions
+
+reference_resolution:
+  width: 1520
+  height: 560
+
+# Card positions with separate rank and suit extraction regions
+card_positions:
+  board:
+    - position: [271, 54, 116, 172]   # 6D - [x, y, width, height]
+      rank_region: [0.0, 0.0, 0.4, 0.5]  # [top%, left%, bottom%, right%] within card
+      suit_region: [0.5, 0.05, 0.75, 0.45]  # [top%, left%, bottom%, right%] within card
+      
+    - position: [417, 54, 116, 172]   # 4S
+      rank_region: [0.0, 0.0, 0.4, 0.5]
+      suit_region: [0.5, 0.05, 0.75, 0.45]
+      
+    - position: [563, 54, 116, 172]   # 8C
+      rank_region: [0.0, 0.0, 0.4, 0.5]
+      suit_region: [0.5, 0.05, 0.75, 0.45]
+      
+    - position: [709, 54, 116, 172]   # 10S
+      rank_region: [0.0, 0.0, 0.4, 0.5]
+      suit_region: [0.5, 0.05, 0.75, 0.45]
+      
+    - position: [855, 54, 116, 172]   # 5H
+      rank_region: [0.0, 0.0, 0.4, 0.5]
+      suit_region: [0.5, 0.05, 0.75, 0.45]
+  
+  left_hand:
+    - position: [271, 290, 115, 168]  # AH
+      rank_region: [0.0, 0.0, 0.4, 0.5]
+      suit_region: [0.5, 0.05, 0.75, 0.45]
+      
+    - position: [337, 290, 115, 168]  # 3H
+      rank_region: [0.0, 0.0, 0.4, 0.5]
+      suit_region: [0.5, 0.05, 0.75, 0.45]
+  
+  right_hand:
+    - position: [789, 290, 115, 168]  # 9H
+      rank_region: [0.0, 0.0, 0.4, 0.5]
+      suit_region: [0.5, 0.05, 0.75, 0.45]
+      
+    - position: [855, 290, 115, 168]  # KD
+      rank_region: [0.0, 0.0, 0.4, 0.5]
+      suit_region: [0.5, 0.05, 0.75, 0.45]
+
+# Card recognition settings
+recognition:
+  min_confidence: 0.7
+  
+  red_threshold:
+    min_r: 130
+    r_over_b: 20
+    r_over_g: 12
+  
+  black_threshold:
+    max_r: 140
+    max_g: 140
+    max_b: 140
+
+# Analysis settings
+analysis:
+  loop_interval: 2.0
+  retry_on_failure: true
+  max_retries: 3
+
+# Logging
+logging:
+  level: INFO
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "poker_analyzer.log"
+  console: true

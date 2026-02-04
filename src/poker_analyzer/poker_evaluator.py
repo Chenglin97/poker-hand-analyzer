@@ -37,39 +37,31 @@ class PokerEvaluator:
     
     def evaluate_hand(self, hole_cards: List[str], board: List[str]) -> Tuple[int, str]:
         """
-        Evaluate the best 5-card hand from 2 hole cards + 5 board cards.
+        Evaluate the best 5-card hand.
         
-        Args:
-            hole_cards: List of 2 hole cards (e.g., ['AH', 'KS'])
-            board: List of 5 board cards
-            
         Returns:
-            Tuple of (rank_value, hand_name)
+            Tuple of (rank_value, hand_name, best_5_cards)
         """
-        if len(hole_cards) != 2:
-            logger.error(f"Invalid hole cards count: {len(hole_cards)}")
-            return 0, "Invalid"
-        
-        if len(board) != 5:
-            logger.error(f"Invalid board count: {len(board)}")
-            return 0, "Invalid"
+        if len(hole_cards) != 2 or len(board) != 5:
+            return 0, "Invalid", []
         
         all_cards = hole_cards + board
         
         best_rank = 0
         best_name = "High Card"
+        best_5 = []
         
-        # Try all 21 combinations of 5 cards from 7
         for combo in combinations(all_cards, 5):
             rank, name = self._rank_5_cards(list(combo))
             
             if rank > best_rank:
                 best_rank = rank
                 best_name = name
+                best_5 = list(combo)
         
-        logger.debug(f"Hand {hole_cards} + {board} = {best_name}")
+        logger.debug(f"Hand {hole_cards} + {board} = {best_name} with {best_5}")
         
-        return best_rank, best_name
+        return best_rank, best_name, best_5
     
     def _rank_5_cards(self, cards: List[str]) -> Tuple[int, str]:
         """
