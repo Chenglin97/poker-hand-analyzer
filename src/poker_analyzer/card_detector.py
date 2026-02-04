@@ -253,38 +253,39 @@ class CardDetector:
                 heart_score = 0
                 diamond_score = 0
                 
+                # EXTENT is the most reliable metric for diamonds
+                # Diamonds have LOW extent (fill less of bounding box)
+                if extent < 0.50:
+                    diamond_score += 4  # Strong indicator (increased from 3)
+                elif extent < 0.55:
+                    diamond_score += 2  # Moderate indicator (increased from 1)
+                elif extent > 0.65:
+                    heart_score += 2
+                elif extent > 0.60:
+                    heart_score += 1
+                
                 # Circularity
                 if circularity < 0.35:
-                    diamond_score += 3
+                    diamond_score += 2
                 elif circularity < 0.50:
                     diamond_score += 1
-                elif circularity > 0.65:
+                elif circularity > 0.70:  # Increased threshold
                     heart_score += 2
-                elif circularity > 0.54:
+                elif circularity > 0.60:
                     heart_score += 1
                 
                 # Solidity
                 if solidity < 0.70:
                     diamond_score += 2
-                elif solidity > 0.90:
-                    heart_score += 1
-                elif solidity > 0.80:
-                    heart_score += 1
-                
-                # Extent
-                if extent < 0.50:
-                    diamond_score += 3
-                elif extent < 0.52:
-                    diamond_score += 1
-                elif extent > 0.60:
+                elif solidity > 0.92:  # Increased threshold
                     heart_score += 2
-                elif extent > 0.55:
+                elif solidity > 0.85:
                     heart_score += 1
                 
                 # Aspect ratio
                 if aspect_ratio < 0.75:
                     diamond_score += 1
-                elif aspect_ratio > 0.85:
+                elif aspect_ratio > 0.95:
                     heart_score += 1
                 
                 logger.debug(f"Red scoring: H={heart_score}, D={diamond_score}")
@@ -295,15 +296,16 @@ class CardDetector:
                 elif heart_score > diamond_score:
                     return 'H'
                 else:
-                    # Tie-breaker
-                    if solidity > 0.82:
-                        logger.debug("Tie → Heart (solidity)")
-                        return 'H'
-                    elif extent < 0.53:
-                        logger.debug("Tie → Diamond (extent)")
+                    # Tie-breaker: EXTENT is most reliable
+                    if extent < 0.55:
+                        logger.debug("Tie → Diamond (low extent)")
                         return 'D'
-                    else:
+                    elif solidity > 0.88:
+                        logger.debug("Tie → Heart (high solidity)")
                         return 'H'
+                    else:
+                        logger.debug("Tie → Diamond (default)")
+                        return 'D'  # Changed default to Diamond in ties
             else:
                 # Spades vs Clubs
                 if aspect_ratio < 0.85:

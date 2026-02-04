@@ -30,20 +30,20 @@ card_positions:
   left_hand:
     - position: [271, 290, 115, 168]  # AH
       rank_region: [0.0, 0.0, 0.4, 0.5]
-      suit_region: [0.5, 0.05, 0.75, 0.45]
+      suit_region: [0.5, 0.05, 0.8, 0.45]
       
     - position: [337, 290, 115, 168]  # 3H
       rank_region: [0.0, 0.0, 0.4, 0.5]
-      suit_region: [0.5, 0.05, 0.75, 0.45]
+      suit_region: [0.45, 0.05, 0.75, 0.45]
   
   right_hand:
     - position: [789, 290, 115, 168]  # 9H
       rank_region: [0.0, 0.0, 0.4, 0.5]
-      suit_region: [0.5, 0.05, 0.75, 0.45]
+      suit_region: [0.5, 0.05, 0.8, 0.45]
       
     - position: [855, 290, 115, 168]  # KD
       rank_region: [0.0, 0.0, 0.4, 0.5]
-      suit_region: [0.5, 0.05, 0.75, 0.45]
+      suit_region: [0.45, 0.05, 0.75, 0.45]
 
 # Card recognition settings
 recognition:
