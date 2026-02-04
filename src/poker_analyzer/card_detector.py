@@ -1,5 +1,3 @@
-"""Card detection and recognition."""
-
 import cv2
 import numpy as np
 import pytesseract
@@ -147,7 +145,7 @@ class CardDetector:
     
     def _detect_suit(self, corner_img: np.ndarray) -> Optional[str]:
         """
-        Detect suit by color analysis.
+        Detect suit by color and shape analysis.
         
         Args:
             corner_img: Corner image containing suit symbol
@@ -176,15 +174,96 @@ class CardDetector:
         max_g = black_cfg.get('max_g', 100)
         max_b = black_cfg.get('max_b', 100)
         
-        # Detect suit by color
-        if r > min_r and r > b + r_over_b and r > g + r_over_g:
-            # Red suit - default to Hearts
-            # TODO: Add shape detection to distinguish Hearts vs Diamonds
-            return 'H'
-        elif r < max_r and g < max_g and b < max_b:
-            # Black suit - default to Spades
-            # TODO: Add shape detection to distinguish Spades vs Clubs
-            return 'S'
+        # First determine if red or black
+        is_red = r > min_r and r > b + r_over_b and r > g + r_over_g
+        is_black = r < max_r and g < max_g and b < max_b
         
-        logger.warning(f"Could not determine suit from color: R={r:.1f}, G={g:.1f}, B={b:.1f}")
-        return None
+        if not (is_red or is_black):
+            logger.warning(f"Could not determine color: R={r:.1f}, G={g:.1f}, B={b:.1f}")
+            return None
+        
+        # Analyze shape to distinguish between suits of same color
+        try:
+            suit = self._distinguish_suit_by_shape(suit_region, is_red)
+            if suit:
+                logger.debug(f"Detected suit {suit} (red={is_red}) with color R={r:.1f}, G={g:.1f}, B={b:.1f}")
+                return suit
+        except Exception as e:
+            logger.warning(f"Shape analysis failed: {e}")
+        
+        # Fallback to color only
+        return 'H' if is_red else 'S'
+    
+    def _distinguish_suit_by_shape(self, suit_region: np.ndarray, is_red: bool) -> Optional[str]:
+        """
+        Distinguish between suits of the same color using shape analysis.
+        
+        Args:
+            suit_region: Image region containing suit symbol
+            is_red: True if red suit, False if black suit
+            
+        Returns:
+            Suit character or None
+        """
+        # Convert to grayscale
+        gray = cv2.cvtColor(suit_region, cv2.COLOR_BGR2GRAY)
+        
+        # Threshold to get binary image
+        _, binary = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY_INV)
+        
+        # Find contours
+        contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        if not contours:
+            return None
+        
+        # Get largest contour (the suit symbol)
+        largest_contour = max(contours, key=cv2.contourArea)
+        area = cv2.contourArea(largest_contour)
+        
+        # Need minimum area to analyze
+        if area < 10:
+            return None
+        
+        perimeter = cv2.arcLength(largest_contour, True)
+        
+        # Calculate shape metrics
+        # Circularity: 4π × area / perimeter²
+        # Perfect circle = 1.0, Square ≈ 0.785
+        circularity = 0
+        if perimeter > 0:
+            circularity = 4 * np.pi * area / (perimeter * perimeter)
+        
+        # Bounding box aspect ratio
+        x, y, w_box, h_box = cv2.boundingRect(largest_contour)
+        aspect_ratio = w_box / h_box if h_box > 0 else 1.0
+        
+        # Convex hull ratio (how convex the shape is)
+        hull = cv2.convexHull(largest_contour)
+        hull_area = cv2.contourArea(hull)
+        solidity = area / hull_area if hull_area > 0 else 0
+        
+        logger.debug(f"Shape metrics: circularity={circularity:.3f}, aspect={aspect_ratio:.3f}, solidity={solidity:.3f}")
+        
+        if is_red:
+            # Distinguish Hearts (♥) vs Diamonds (♦)
+            # Hearts: rounded, more circular, higher solidity
+            # Diamonds: angular, rhombus shape, lower circularity
+            
+            if circularity > 0.65 or solidity > 0.85:
+                # More rounded and solid = Hearts
+                return 'H'
+            else:
+                # More angular = Diamonds
+                return 'D'
+        else:
+            # Distinguish Spades (♠) vs Clubs (♣)
+            # Spades: pointed top, taller, lower aspect ratio
+            # Clubs: three circles, more compact, higher aspect ratio
+            
+            if aspect_ratio < 0.85:
+                # Taller/narrower = Spades
+                return 'S'
+            else:
+                # Wider/more compact = Clubs
+                return 'C'
