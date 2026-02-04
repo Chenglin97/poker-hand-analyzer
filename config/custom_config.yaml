@@ -1,47 +1,47 @@
 # Custom configuration with separate rank and suit regions
 
 reference_resolution:
-  width: 1520
+  width: 1580
   height: 560
 
 # Card positions with separate rank and suit extraction regions
 card_positions:
   board:
-    - position: [271, 54, 116, 172]   # 6D - [x, y, width, height]
+    - position: [426, 66, 116, 172]   # 6D - [x, y, width, height]
       rank_region: [0.0, 0.0, 0.4, 0.5]  # [top%, left%, bottom%, right%] within card
       suit_region: [0.5, 0.05, 0.75, 0.45]  # [top%, left%, bottom%, right%] within card
       
-    - position: [417, 54, 116, 172]   # 4S
+    - position: [572, 66, 116, 172]   # 4S
       rank_region: [0.0, 0.0, 0.4, 0.5]
       suit_region: [0.5, 0.05, 0.75, 0.45]
       
-    - position: [563, 54, 116, 172]   # 8C
+    - position: [718, 66, 116, 172]   # 8C
       rank_region: [0.0, 0.0, 0.4, 0.5]
       suit_region: [0.5, 0.05, 0.75, 0.45]
       
-    - position: [709, 54, 116, 172]   # 10S
+    - position: [864, 66, 116, 172]   # 10S
       rank_region: [0.0, 0.0, 0.4, 0.5]
       suit_region: [0.5, 0.05, 0.75, 0.45]
       
-    - position: [855, 54, 116, 172]   # 5H
+    - position: [1009, 66, 116, 172]   # 5H
       rank_region: [0.0, 0.0, 0.4, 0.5]
       suit_region: [0.5, 0.05, 0.75, 0.45]
   
   left_hand:
-    - position: [271, 290, 115, 168]  # AH
-      rank_region: [0.0, 0.0, 0.4, 0.5]
+    - position: [426, 290, 115, 168]  # AH
+      rank_region: [0.0, 0.0, 0.45, 0.5]
       suit_region: [0.5, 0.05, 0.8, 0.45]
       
-    - position: [337, 290, 115, 168]  # 3H
+    - position: [492, 290, 115, 168]  # 3H
       rank_region: [0.0, 0.0, 0.4, 0.5]
       suit_region: [0.45, 0.05, 0.75, 0.45]
   
   right_hand:
-    - position: [789, 290, 115, 168]  # 9H
-      rank_region: [0.0, 0.0, 0.4, 0.5]
+    - position: [939, 290, 115, 168]  # 9H
+      rank_region: [0.0, 0.0, 0.45, 0.5]
       suit_region: [0.5, 0.05, 0.8, 0.45]
       
-    - position: [855, 290, 115, 168]  # KD
+    - position: [1005, 290, 115, 168]  # KD
       rank_region: [0.0, 0.0, 0.4, 0.5]
       suit_region: [0.45, 0.05, 0.75, 0.45]
 

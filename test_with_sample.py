@@ -17,7 +17,7 @@ print("=" * 70)
 print()
 
 # Load your sample image
-img_path = './test_capture.png'
+img_path = './live_debug.png'
 print(f"Loading: {img_path}")
 
 img = cv2.imread(img_path)

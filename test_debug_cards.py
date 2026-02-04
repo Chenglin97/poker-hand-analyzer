@@ -12,7 +12,7 @@ print("DEBUG: Card Region Extraction (Rank + Suit Separate)")
 print("=" * 70)
 
 # Load image
-img_path = './test_capture.png'
+img_path = './live_debug.png'
 img = cv2.imread(img_path)
 
 if img is None:
